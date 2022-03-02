@@ -10,20 +10,31 @@ ma = Marshmallow(app)
 CORS(app)
 
 class Quote(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
-    text = db.Column(db.String, nullable = False)
+    id = db.Column(db.Integer, primary_key=True)
+    text = db.Column(db.String, nullable=False)
     author = db.Column(db.String)
     def __init__(self,text, author):
         self.text = text
         self.author = author
 
 class Date(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
-    day = db.Column(db.Integer, nullable = False)
-    quote = db.Column(db.Integer, nullable = False)
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.Integer, nullable=False)
+    quote = db.Column(db.Integer, nullable=False)
     def __init__(self,day, quote):
         self.day = day
         self.quote = quote
+
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String, nullable=False, unique=True)
+    password = db.Column(db.String, nullable=False)
+
+    def __init__(self, username, password):
+        self.username = username 
+        self.password = password 
+        
 
 class QuoteSchema(ma.Schema):
     class Meta:
@@ -35,6 +46,14 @@ class DateSchema(ma.Schema):
     class Meta:
         fields = ("id", "day", "quote")
 date_schema = DateSchema()
+
+class UserSchema(ma.Schema):
+    class Meta:
+        fields = ("id", "username") #TODO Remove sensitive fields
+
+user_schema = UserSchema()
+multiple_user_schema = UserSchema(many=True)
+
 @app.route("/quote/add", methods=["POST"])
 def add_quote():
     if request.content_type != "application/json":
@@ -61,6 +80,7 @@ def create_initial_date():
     post_data = request.get_json()
     day = post_data.get("day")
     quote = post_data.get("quote")
+
     record = Date(day,quote)
     db.session.add(record)
     db.session.commit()
@@ -77,7 +97,7 @@ def update_date():
     if record is None:
         return jsonify("Error Date has not been initialized.")
 
-    if request.content != "application/json":
+    if request.content_type != "application/json":
         return jsonify("Error:Data must be sent as json")
 
         put_date = request.get_json()
@@ -98,6 +118,49 @@ def update_date():
         db.session.commit()
 
         return jsonify(date_schema.dump(record))
+
+
+@app.route("/user/add", methods=["POST"])
+def add_user():
+    if request.content_type != "application/json":
+        return jsonify("Error:Data must be sent as json")
+
+    post_data = request.get_json()
+    username = post_data.get("username")
+    password = post_data.get("password")
+
+    record_check = db.session.query(User).filter(User.username == username).first()
+    if record_check is not None:
+        return jsonify("Error: Username already exists.")
+
+    record = User(username,password)
+    db.session.add(record)
+    db.session.commit()
+    
+    return jsonify(user_schema.dump(record))
+
+@app.route("/user/get", methods= ["GET"])
+def get_user():
+    record = db.session.query(User).first()
+    return jsonify(user_schema.dump(record))
+
+@app.route("/user/login", methods=["POST"])
+def login():
+    if request.content_type != "application/json":
+        return jsonify("Error: Data Must be sent as JSON")
+
+    post_data = request.get_json()
+    username = post_data.get("username")
+    password = post_data.get("password")
+
+    record = db.session.query(User).filter(User.username == username).first()
+    if record is None:
+        return jsonify("User NOT verified")
+    
+    if record.password != password:
+        return jsonify("User Not verified")
+
+    return jsonify("User verified")
 
 
 if __name__ == "__main__":
